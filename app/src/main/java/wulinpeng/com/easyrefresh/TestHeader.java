@@ -20,18 +20,8 @@ public class TestHeader extends TextView implements IRefreshHeader {
     }
 
     @Override
-    public void onStartRefresh() {
-
-    }
-
-    @Override
-    public void onCancelRefresh() {
-
-    }
-
-    @Override
     public void onRefreshing() {
-
+        setText("refreshing now!");
     }
 
     @Override

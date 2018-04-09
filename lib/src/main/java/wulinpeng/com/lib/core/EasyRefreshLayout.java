@@ -71,6 +71,35 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         mContentView = getChildAt(0);
     }
 
+    public void setRefreshing(boolean refreshing) {
+        if (refreshing && mCurrentState == STATE_NORMAL) {
+            // 开始刷新
+            startRefreshing();
+        } else if (!refreshing && mCurrentState == STATE_REFRESHING) {
+            // 停止刷新
+            stopRefreshing();
+        }
+    }
+
+    private void stopRefreshing() {
+        // TODO: 18/4/9 抽离方法通过showHeight更新topMargin
+        // TODO: 18/4/9 使用scroller圆滑过度动画
+        IRefreshHeader header = (IRefreshHeader) mHeaderView;
+        mHeaderShowHeight = 0;
+        mCurrentState = STATE_NORMAL;
+        setMargin(mHeaderView, 0, mHeaderShowHeight - mHeaderHeight, 0, 0);
+    }
+
+    private void startRefreshing() {
+        // TODO: 18/4/9 抽离方法通过showHeight更新topMargin
+        // TODO: 18/4/9 使用scroller圆滑过度动画
+        IRefreshHeader header = (IRefreshHeader) mHeaderView;
+        mHeaderShowHeight = mHeaderHeight;
+        mCurrentState = STATE_REFRESHING;
+        header.onRefreshing();
+        setMargin(mHeaderView, 0, mHeaderShowHeight - mHeaderHeight, 0, 0);
+    }
+
     public void setHeaderView(View headerView) {
         checkHeaderView(headerView);
         addView(headerView, 0);
@@ -100,6 +129,7 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     /**
      * 在子view滑动前判断自己需要的滑动，然后再给子view
+     * todo 当前状态若是refreshing特殊操作
      * @param target
      * @param dx
      * @param dy 向上滑动为正
@@ -171,16 +201,21 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     @Override
     public void onStopNestedScroll(View child) {
         super.onStopNestedScroll(child);
+        IRefreshHeader header = (IRefreshHeader) mHeaderView;
         if (mHeaderShowHeight > 0) {
-            mHeaderShowHeight = 0;
-            // TODO: 18/4/7 抽离方法通过showHeight更新topMargin
-            // TODO: 18/4/7 使用scroller圆滑过度动画
-            setMargin(mHeaderView, 0, -mHeaderHeight, 0, 0);
+            float changeStateRatio = header.getChangeStateRatio();
+            if (mHeaderShowHeight * 1.0f / mHeaderHeight > changeStateRatio) {
+                // 开始刷新
+                startRefreshing();
+            } else {
+                stopRefreshing();
+            }
         }
     }
 
     /**
      * 禁止子view fling，避免对mUnConsumedY的更新造成影响
+     * todo 支持fling
      * @param target
      * @param velocityX
      * @param velocityY

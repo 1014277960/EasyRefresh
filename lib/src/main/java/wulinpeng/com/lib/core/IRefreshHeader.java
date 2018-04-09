@@ -7,12 +7,9 @@ package wulinpeng.com.lib.core;
  */
 public interface IRefreshHeader {
 
-    void onStartRefresh();
-
-    void onCancelRefresh();
-
     void onRefreshing();
 
+    // 根据progress改变内容
     void onRefreshProgress(float progress);
 
     // 改变下拉状态的阈值
