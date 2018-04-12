@@ -5,7 +5,7 @@ package wulinpeng.com.lib.core;
  * @datetime: 18/4/3 下午11:18
  * @description:
  */
-public interface IRefreshHeader {
+public interface EasyRefreshListener {
 
     void onRefreshing();
 

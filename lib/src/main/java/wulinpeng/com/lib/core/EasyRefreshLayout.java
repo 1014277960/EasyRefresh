@@ -35,6 +35,8 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     private View mFooterView;
     private int mHeaderHeight;
 
+    private EasyRefreshListener mListener;
+
     private boolean mIsLoadOnce = false;
 
     public EasyRefreshLayout(Context context) {
@@ -47,19 +49,8 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     public EasyRefreshLayout(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        checkLegal();
         initAttrs(attrs, defStyleAttr);
         initView();
-    }
-
-    /**
-     * 检查合法性，如child数量
-     */
-    private void checkLegal() {
-        int childCount = getChildCount();
-        if (childCount != 0) {
-            throw new RuntimeException("only one child is need!");
-        }
     }
 
     private void initAttrs(@Nullable AttributeSet attrs, int defStyleAttr) {
@@ -68,7 +59,10 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     private void initView() {
         setOrientation(VERTICAL);
-        mContentView = getChildAt(0);
+    }
+
+    public void addRefreshListener(EasyRefreshListener listener) {
+        this.mListener = listener;
     }
 
     public void setRefreshing(boolean refreshing) {
@@ -84,26 +78,34 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     private void stopRefreshing() {
         // TODO: 18/4/9 抽离方法通过showHeight更新topMargin
         // TODO: 18/4/9 使用scroller圆滑过度动画
-        IRefreshHeader header = (IRefreshHeader) mHeaderView;
         mHeaderShowHeight = 0;
         mCurrentState = STATE_NORMAL;
-        setMargin(mHeaderView, 0, mHeaderShowHeight - mHeaderHeight, 0, 0);
+        setHeaderTopMarginWithShowHeight();
     }
 
     private void startRefreshing() {
         // TODO: 18/4/9 抽离方法通过showHeight更新topMargin
         // TODO: 18/4/9 使用scroller圆滑过度动画
-        IRefreshHeader header = (IRefreshHeader) mHeaderView;
+
+        // 必须在onMeasure之后才有用
+        if (mHeaderView == null || mContentView == null) {
+            Log.d("Debug", "must call startRefreshing after onMeasure being called!");
+            return;
+        }
+
         mHeaderShowHeight = mHeaderHeight;
         mCurrentState = STATE_REFRESHING;
-        header.onRefreshing();
-        setMargin(mHeaderView, 0, mHeaderShowHeight - mHeaderHeight, 0, 0);
+        if (mListener != null) {
+            mListener.onRefreshing();
+        }
+        setHeaderTopMarginWithShowHeight();
     }
 
-    public void setHeaderView(View headerView) {
-        checkHeaderView(headerView);
-        addView(headerView, 0);
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         mHeaderView = getChildAt(0);
+        mContentView = getChildAt(1);
     }
 
     @Override
@@ -113,12 +115,6 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
             mHeaderHeight = mHeaderView.getHeight();
             setMargin(mHeaderView, 0, -mHeaderHeight, 0, 0);
             mIsLoadOnce = true;
-        }
-    }
-
-    private void checkHeaderView(View headerView) {
-        if (!(headerView instanceof IRefreshHeader)) {
-            throw new RuntimeException("header must implement IRefreshHeader");
         }
     }
 
@@ -154,18 +150,7 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         // 其他情况皆为更新mUnConsumedY，在onNestedScroll方法中更新
         Log.d("Debug", mHeaderShowHeight + " " + mUnConsumedY);
         processHeaderShowHeight();
-        changeState(mHeaderShowHeight, dy);
-    }
-
-    /**
-     * 根据mHeaderShowHeight和滑动方向更新当前状态
-     * @param mHeaderShowHeight
-     * @param dy
-     */
-    private void changeState(int mHeaderShowHeight, int dy) {
-        IRefreshHeader header = (IRefreshHeader) mHeaderView;
-
-        header.onRefreshProgress(mHeaderShowHeight * 1.0f / mHeaderHeight);
+        updateProgress(mHeaderShowHeight);
     }
 
     /**
@@ -180,7 +165,17 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
             mHeaderShowHeight = (int) (mHeaderHeight + extra * dragRatio);
         }
         // 通过mHeaderShowHeight来设置topMargin
-        setMargin(mHeaderView, 0, mHeaderShowHeight - mHeaderHeight, 0, 0);
+        setHeaderTopMarginWithShowHeight();
+    }
+
+    /**
+     * 根据mHeaderShowHeight更新当前进度
+     * @param mHeaderShowHeight
+     */
+    private void updateProgress(int mHeaderShowHeight) {
+        if (mListener != null) {
+            mListener.onRefreshProgress(mHeaderShowHeight * 1.0f / mHeaderHeight);
+        }
     }
 
     /**
@@ -201,9 +196,8 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     @Override
     public void onStopNestedScroll(View child) {
         super.onStopNestedScroll(child);
-        IRefreshHeader header = (IRefreshHeader) mHeaderView;
         if (mHeaderShowHeight > 0) {
-            float changeStateRatio = header.getChangeStateRatio();
+            float changeStateRatio = mListener == null? 1.0f : mListener.getChangeStateRatio();
             if (mHeaderShowHeight * 1.0f / mHeaderHeight > changeStateRatio) {
                 // 开始刷新
                 startRefreshing();
@@ -224,6 +218,10 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     @Override
     public boolean onNestedPreFling(View target, float velocityX, float velocityY) {
         return true;
+    }
+
+    private void setHeaderTopMarginWithShowHeight() {
+        setMargin(mHeaderView, 0, mHeaderShowHeight - mHeaderHeight, 0, 0);
     }
 
     private void setMargin(View target, int left, int top, int right, int bottom) {
