@@ -8,6 +8,7 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.Scroller;
 
 /**
  * @author wulinpeng
@@ -19,7 +20,9 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     // 初始状态
     public static int STATE_NORMAL = 0;
     // 刷新状态
-    public static int STATE_REFRESHING = 5;
+    public static int STATE_REFRESHING = 1;
+
+    private static String LOG_TAG = "Debug";
 
     /**
      * 通过持续更新mUnConsumedY来判断子view是否滑动到最顶端
@@ -39,6 +42,9 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     private boolean mIsLoadOnce = false;
 
+    private Scroller mScroller;
+    private boolean isScrolling = false;
+
     public EasyRefreshLayout(Context context) {
         this(context, null);
     }
@@ -49,12 +55,16 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     public EasyRefreshLayout(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        init();
         initAttrs(attrs, defStyleAttr);
         initView();
     }
 
-    private void initAttrs(@Nullable AttributeSet attrs, int defStyleAttr) {
+    private void init() {
+        mScroller = new Scroller(getContext());
+    }
 
+    private void initAttrs(@Nullable AttributeSet attrs, int defStyleAttr) {
     }
 
     private void initView() {
@@ -75,30 +85,46 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         }
     }
 
+    // 滚动到初始位置
     private void stopRefreshing() {
-        // TODO: 18/4/9 抽离方法通过showHeight更新topMargin
-        // TODO: 18/4/9 使用scroller圆滑过度动画
-        mHeaderShowHeight = 0;
         mCurrentState = STATE_NORMAL;
-        setHeaderTopMarginWithShowHeight();
+        startAnimation(mHeaderShowHeight, 0);
     }
 
+    // 滚动到刷新位置，通知刷新
     private void startRefreshing() {
-        // TODO: 18/4/9 抽离方法通过showHeight更新topMargin
-        // TODO: 18/4/9 使用scroller圆滑过度动画
 
         // 必须在onMeasure之后才有用
         if (mHeaderView == null || mContentView == null) {
-            Log.d("Debug", "must call startRefreshing after onMeasure being called!");
+            Log.d(LOG_TAG, "must call startRefreshing after onMeasure being called!");
             return;
         }
 
-        mHeaderShowHeight = mHeaderHeight;
         mCurrentState = STATE_REFRESHING;
         if (mListener != null) {
             mListener.onRefreshing();
         }
-        setHeaderTopMarginWithShowHeight();
+        startAnimation(mHeaderShowHeight, mHeaderHeight);
+    }
+
+    private void startAnimation(int startShowHeight, int endShowHeight) {
+        if (isScrolling) {
+            return;
+        }
+        isScrolling = true;
+        mScroller.startScroll(0, startShowHeight, 0, endShowHeight - startShowHeight);
+        invalidate();
+    }
+
+    @Override
+    public void computeScroll() {
+        if (mScroller.computeScrollOffset()) {
+            mHeaderShowHeight = mScroller.getCurrY();
+            setHeaderTopMarginWithShowHeight();
+            invalidate();
+        } else {
+            isScrolling = false;
+        }
     }
 
     @Override
@@ -133,6 +159,9 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
      */
     @Override
     public void onNestedPreScroll(View target, int dx, int dy, int[] consumed) {
+        if (isScrolling) {
+            return;
+        }
         if (dy > 0 && mHeaderShowHeight > 0) {
             // header显示的时候上滑
             if (dy <= mHeaderShowHeight) {
@@ -148,9 +177,8 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
             mHeaderShowHeight -= dy;
         }
         // 其他情况皆为更新mUnConsumedY，在onNestedScroll方法中更新
-        Log.d("Debug", mHeaderShowHeight + " " + mUnConsumedY);
         processHeaderShowHeight();
-        updateProgress(mHeaderShowHeight);
+        updateProgress();
     }
 
     /**
@@ -170,9 +198,8 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     /**
      * 根据mHeaderShowHeight更新当前进度
-     * @param mHeaderShowHeight
      */
-    private void updateProgress(int mHeaderShowHeight) {
+    private void updateProgress() {
         if (mListener != null) {
             mListener.onRefreshProgress(mHeaderShowHeight * 1.0f / mHeaderHeight);
         }
