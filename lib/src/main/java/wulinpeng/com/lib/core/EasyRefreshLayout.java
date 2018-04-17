@@ -7,6 +7,7 @@ import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
+import android.widget.AbsListView;
 import android.widget.LinearLayout;
 import android.widget.Scroller;
 
@@ -35,7 +36,6 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
     private View mContentView;
     private View mHeaderView;
-    private View mFooterView;
     private int mHeaderHeight;
 
     private EasyRefreshListener mListener;
@@ -258,5 +258,16 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         params.rightMargin = right;
         params.bottomMargin = bottom;
         target.setLayoutParams(params);
+    }
+
+    @Override
+    public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+        // 如果content继承自AbsListView或者不支持nestedScroll那就不允许disallowIntercept
+        // 为后面支持其他View的下拉做准备(如ListView一开始滑动就会disallowIntercept，即使滑倒顶端也不会有事件传到这里来)
+        if (mContentView instanceof AbsListView || !ViewCompat.isNestedScrollingEnabled(mContentView)) {
+
+        } else {
+            super.requestDisallowInterceptTouchEvent(disallowIntercept);
+        }
     }
 }
