@@ -6,6 +6,7 @@ import android.support.v4.view.NestedScrollingParent;
 import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AbsListView;
 import android.widget.LinearLayout;
@@ -30,6 +31,9 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
      */
     private int mUnConsumedY = 0;
     private int mHeaderShowHeight = 0;
+    private boolean isNestedScrollInProgress = false;
+
+    private int mLastY;
 
     // 状态
     private int mCurrentState = STATE_NORMAL;
@@ -145,6 +149,12 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     }
 
     @Override
+    public void onNestedScrollAccepted(View child, View target, int axes) {
+        super.onNestedScrollAccepted(child, target, axes);
+        isNestedScrollInProgress = true;
+    }
+
+    @Override
     public boolean onStartNestedScroll(View child, View target, int nestedScrollAxes) {
         return (nestedScrollAxes & ViewCompat.SCROLL_AXIS_VERTICAL) != 0;
     }
@@ -162,36 +172,36 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         if (isScrolling) {
             return;
         }
+        Log.d(LOG_TAG, "dy " + dy);
+        int changeHeight = 0;
         if (dy > 0 && mHeaderShowHeight > 0) {
             // header显示的时候上滑
-            if (dy <= mHeaderShowHeight) {
-                mHeaderShowHeight -= dy;
-                consumed[1] = dy;
-            } else {
-                consumed[1] = mHeaderShowHeight;
-                mHeaderShowHeight = 0;
-            }
+            changeHeight = -dy;
+            consumed[1] = dy;
+
         }
         if (dy < 0 && mUnConsumedY == 0) {
+            changeHeight = -dy;
             consumed[1] = dy;
-            mHeaderShowHeight -= dy;
         }
         // 其他情况皆为更新mUnConsumedY，在onNestedScroll方法中更新
-        processHeaderShowHeight();
+        processHeaderShowHeight(changeHeight);
         updateProgress();
     }
 
     /**
-     * 处理mHeaderShowHeight，如果高于mHeaderHeight，加一个滑动的阻力
+     * 处理mHeaderShowHeight的增值，如果高于mHeaderHeight，加一个滑动的阻力
      */
-    private void processHeaderShowHeight() {
+    private void processHeaderShowHeight(int changeHeight) {
         // 计算阻力作用后的mHeaderShowHeight
-        if (mHeaderShowHeight > mHeaderHeight) {
-            int extra = mHeaderShowHeight - mHeaderHeight;
-            // 阻力系数
-            float dragRatio = mHeaderHeight * 1.0f / mHeaderShowHeight;
-            mHeaderShowHeight = (int) (mHeaderHeight + extra * dragRatio);
+        float dragRatio = 1.0f;
+        if ((mHeaderShowHeight + changeHeight) > mHeaderHeight) {
+            dragRatio = mHeaderHeight * 1.0f / (mHeaderShowHeight + changeHeight);
         }
+//        Log.d(LOG_TAG, changeHeight + " " + changeHeight * dragRatio);
+        Log.d(LOG_TAG, mHeaderShowHeight + " " + changeHeight + " " + dragRatio);
+        mHeaderShowHeight += (changeHeight * dragRatio);
+        Log.d(LOG_TAG, mHeaderShowHeight + "");
         // 通过mHeaderShowHeight来设置topMargin
         setHeaderTopMarginWithShowHeight();
     }
@@ -223,6 +233,11 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     @Override
     public void onStopNestedScroll(View child) {
         super.onStopNestedScroll(child);
+        isNestedScrollInProgress = false;
+        processUpOrCancel();
+    }
+
+    private void processUpOrCancel() {
         if (mHeaderShowHeight > 0) {
             float changeStateRatio = mListener == null? 1.0f : mListener.getChangeStateRatio();
             if (mHeaderShowHeight * 1.0f / mHeaderHeight > changeStateRatio) {
@@ -258,6 +273,53 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         params.rightMargin = right;
         params.bottomMargin = bottom;
         target.setLayoutParams(params);
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+
+        boolean isHeaderDrag = false;
+
+        switch (ev.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                mLastY = (int) ev.getY();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                int y = (int) ev.getY();
+                if (y > mLastY || (y < mLastY && mHeaderShowHeight > 0)) {
+                    // header可上拉或可下拉
+                    isHeaderDrag = true;
+                }
+                break;
+        }
+
+        return isHeaderDrag;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent ev) {
+        if (isScrolling || isNestedScrollInProgress) {
+            return false;
+        }
+
+        switch (ev.getAction()) {
+            case MotionEvent.ACTION_MOVE:
+                int y = (int) ev.getY();
+                int dis = y - mLastY;
+                if (dis > 0 || (dis < 0 && mHeaderShowHeight > 0)) {
+                    // header可上拉或可下拉
+                    processHeaderShowHeight(dis);
+                    updateProgress();
+                }
+                mLastY = y;
+                break;
+            case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_UP:
+                processUpOrCancel();
+                break;
+        }
+
+        return true;
     }
 
     @Override

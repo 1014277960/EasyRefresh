@@ -25,9 +25,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        recyclerView = (RecyclerView) findViewById(R.id.recycler_view);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recyclerView.setAdapter(new TestAdapter(this));
 
         header = (TestHeader) findViewById(R.id.header);
         refreshLayout = (EasyRefreshLayout) findViewById(R.id.refresh_layout);
@@ -60,13 +57,26 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // 测试setRefreshing
-        header.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                refreshLayout.setRefreshing(true);
-            }
-        }, 500);
+//        // 测试setRefreshing
+//        header.postDelayed(new Runnable() {
+//            @Override
+//            public void run() {
+//                refreshLayout.setRefreshing(true);
+//            }
+//        }, 500);
+
+//        testOtherView();
+        testRecyclerView();
+    }
+
+    private void testRecyclerView() {
+        recyclerView = (RecyclerView) findViewById(R.id.recycler_view);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setAdapter(new TestAdapter(this));
+    }
+
+    private void testOtherView() {
+
     }
 
     class TestAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
