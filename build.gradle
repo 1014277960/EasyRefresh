@@ -30,7 +30,7 @@ ext {
     // 编译相关
     compileSdkVersion = 25
     buildToolVersion = "25.0.2"
-    minSdkVersion = 19
+    minSdkVersion = 21
     targetSdkVersion = 25
 
     // 相关依赖库版本

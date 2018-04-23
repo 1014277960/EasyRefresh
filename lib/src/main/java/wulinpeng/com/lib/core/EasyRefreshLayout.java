@@ -10,6 +10,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AbsListView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.Scroller;
 
 /**
@@ -152,10 +153,12 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     public void onNestedScrollAccepted(View child, View target, int axes) {
         super.onNestedScrollAccepted(child, target, axes);
         isNestedScrollInProgress = true;
+        Log.d(LOG_TAG, "nested scroll accepted");
     }
 
     @Override
     public boolean onStartNestedScroll(View child, View target, int nestedScrollAxes) {
+        Log.d(LOG_TAG, "start nested scroll");
         return (nestedScrollAxes & ViewCompat.SCROLL_AXIS_VERTICAL) != 0;
     }
 
@@ -169,10 +172,10 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
      */
     @Override
     public void onNestedPreScroll(View target, int dx, int dy, int[] consumed) {
+        Log.d(LOG_TAG, "nested pre scroll");
         if (isScrolling) {
             return;
         }
-        Log.d(LOG_TAG, "dy " + dy);
         int changeHeight = 0;
         if (dy > 0 && mHeaderShowHeight > 0) {
             // header显示的时候上滑
@@ -187,32 +190,6 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         // 其他情况皆为更新mUnConsumedY，在onNestedScroll方法中更新
         processHeaderShowHeight(changeHeight);
         updateProgress();
-    }
-
-    /**
-     * 处理mHeaderShowHeight的增值，如果高于mHeaderHeight，加一个滑动的阻力
-     */
-    private void processHeaderShowHeight(int changeHeight) {
-        // 计算阻力作用后的mHeaderShowHeight
-        float dragRatio = 1.0f;
-        if ((mHeaderShowHeight + changeHeight) > mHeaderHeight) {
-            dragRatio = mHeaderHeight * 1.0f / (mHeaderShowHeight + changeHeight);
-        }
-//        Log.d(LOG_TAG, changeHeight + " " + changeHeight * dragRatio);
-        Log.d(LOG_TAG, mHeaderShowHeight + " " + changeHeight + " " + dragRatio);
-        mHeaderShowHeight += (changeHeight * dragRatio);
-        Log.d(LOG_TAG, mHeaderShowHeight + "");
-        // 通过mHeaderShowHeight来设置topMargin
-        setHeaderTopMarginWithShowHeight();
-    }
-
-    /**
-     * 根据mHeaderShowHeight更新当前进度
-     */
-    private void updateProgress() {
-        if (mListener != null) {
-            mListener.onRefreshProgress(mHeaderShowHeight * 1.0f / mHeaderHeight);
-        }
     }
 
     /**
@@ -237,18 +214,6 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
         processUpOrCancel();
     }
 
-    private void processUpOrCancel() {
-        if (mHeaderShowHeight > 0) {
-            float changeStateRatio = mListener == null? 1.0f : mListener.getChangeStateRatio();
-            if (mHeaderShowHeight * 1.0f / mHeaderHeight > changeStateRatio) {
-                // 开始刷新
-                startRefreshing();
-            } else {
-                stopRefreshing();
-            }
-        }
-    }
-
     /**
      * 禁止子view fling，避免对mUnConsumedY的更新造成影响
      * todo 支持fling
@@ -260,6 +225,43 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
     @Override
     public boolean onNestedPreFling(View target, float velocityX, float velocityY) {
         return true;
+    }
+
+    /**
+     * 处理mHeaderShowHeight的增值，如果高于mHeaderHeight，加一个滑动的阻力
+     * todo 还是会出现recycler直接下拉无阻力的情况
+     */
+    private void processHeaderShowHeight(int changeHeight) {
+        // 计算阻力作用后的mHeaderShowHeight
+        float dragRatio = 1.0f;
+        if ((mHeaderShowHeight + changeHeight) > mHeaderHeight) {
+            dragRatio = mHeaderHeight * 1.0f / (mHeaderShowHeight + changeHeight);
+        }
+//        Log.d(LOG_TAG, changeHeight + " " + changeHeight * dragRatio);
+        mHeaderShowHeight += (changeHeight * dragRatio);
+        // 通过mHeaderShowHeight来设置topMargin
+        setHeaderTopMarginWithShowHeight();
+    }
+
+    /**
+     * 根据mHeaderShowHeight更新当前进度
+     */
+    private void updateProgress() {
+        if (mListener != null) {
+            mListener.onRefreshProgress(mHeaderShowHeight * 1.0f / mHeaderHeight);
+        }
+    }
+
+    private void processUpOrCancel() {
+        if (mHeaderShowHeight > 0) {
+            float changeStateRatio = mListener == null? 1.0f : mListener.getChangeStateRatio();
+            if (mHeaderShowHeight * 1.0f / mHeaderHeight > changeStateRatio) {
+                // 开始刷新
+                startRefreshing();
+            } else {
+                stopRefreshing();
+            }
+        }
     }
 
     private void setHeaderTopMarginWithShowHeight() {
@@ -280,6 +282,19 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
 
         boolean isHeaderDrag = false;
 
+        // todo 以下两个false直接导致recyclerview直接下拉的时候阻力没用，不知道为什么
+        if (isScrolling || isNestedScrollInProgress) {
+            return false;
+        }
+
+        // recyclerview在down的时候就会触发nested，我们这里down返回false可以触发，接下来recyclerview返回true后面就不会到这个方法了
+        // 但是ScrollView在down的时候是返回false，move才触发nested，我们这里到move基本就返回true，不会有触发的机会，所以在这里提前判断isNestedScrollingEnabled
+        // 需要手动设置ScrollView的enable
+        // TODO: 18/4/23 SwiperefreshLayout不需要手动加enable，不知道怎么弄
+        if (mContentView.isNestedScrollingEnabled()) {
+            return false;
+        }
+
         switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 mLastY = (int) ev.getY();
@@ -292,7 +307,7 @@ public class EasyRefreshLayout extends LinearLayout implements NestedScrollingPa
                 }
                 break;
         }
-
+        Log.d(LOG_TAG, isHeaderDrag + "");
         return isHeaderDrag;
     }
 
